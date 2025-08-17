@@ -1,0 +1,22 @@
+{
+    "name": "multiverse-meshmap",
+    "version": "1.0.0",
+    "description": "Multiverse MeshMap - Meshtastic network analysis tool",
+    "main": "lightning-server.js",
+    "scripts": {
+      "start": "node lightning-server.js",
+      "dev": "node server.js"
+    },
+    "dependencies": {
+      "cors": "^2.8.5",
+      "express": "^4.18.2",
+      "mqtt": "^5.14.0",
+      "node-fetch": "^2.6.7",
+      "protobufjs": "^7.2.5"
+    },
+    "author": "Multiverse MeshMap",
+    "license": "MIT",
+    "engines": {
+      "node": ">=14.0.0"
+    }
+  }

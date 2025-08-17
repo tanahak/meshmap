@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TK's Meshtastic Network Impact Identifier</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: hotpink;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            max-width: 300px;
+        }
+
+        .controls h3 {
+            margin: 0 0 10px 0;
+            color: greenyellow;
+            font-size: 20px;
+        }
+
+        .status {
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .status.loading {
+            background-color: #e4ec4d;
+            color: black;
+        }
+
+        .status.success {
+            background-color: #e4ec4d;
+            color: #155724;
+        }
+
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .refresh-btn {
+            background-color: #00adb3;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .refresh-btn:hover {
+            background-color: lawngreen;
+            color: black;
+        }
+
+        .refresh-btn:disabled {
+            background-color: greenyellow;
+            color: black;
+            cursor: not-allowed;
+        }
+
+        .legend {
+            color: white;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 4px solid cyan;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            font-size: 14px;
+        }
+
+        .legend-marker {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .instructions {
+            font-size: 12px;
+            line-height: 14px;
+            margin-top: 5px;
+            padding-top: 5px;
+            border-top: 4px solid cyan;
+            color: white;
+        }
+
+        .debug-info {
+            margin-top: 3px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 10px;
+            font-family: monospace;
+            max-height: 60px;
+            overflow-y: auto;
+        }
+
+        /* Mobile responsive - hide controls on small screens */
+        @media (max-width: 768px) {
+            .controls {
+                display: none;
+            }
+
+            /* Keep admin button visible on mobile */
+            #mobileAdminBtn {
+                display: block !important;
+            }
+
+            #desktopAdminBtn {
+                display: none !important;
+            }
+        }
+
+        @media (min-width: 769px) {
+            #mobileAdminBtn {
+                display: none !important;
+            }
+
+            #desktopAdminBtn {
+                display: block !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <!-- Mobile admin button - always visible on mobile -->
+    <div id="mobileAdminBtn" style="position: absolute; top: 15px; right: 15px; z-index: 1001;">
+        <button onclick="toggleAdmin()"
+            style="background: #333; color: white; border: none; padding: 12px 18px; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; box-shadow: 0 3px 15px rgba(0,0,0,0.4);">
+            🔓 Admin Login
+        </button>
+    </div>
+
+    <div class="controls">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h3 style="margin: 0;">Multiverse MeshMap</h3>
+            <!-- Desktop admin button - part of controls -->
+            <button id="desktopAdminBtn" onclick="toggleAdmin()"
+                style="background: #333; color: white; border: none; padding: 8px 14px; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer;">
+                🔓 Admin Login
+            </button>
+        </div>
+        <div id="status" class="status loading">Loading data...</div>
+        <button id="refreshBtn" class="refresh-btn" onclick="loadSheetData()">Refresh Data</button>
+
+        <div class="legend">
+            <h4 style="margin: 0 0 8px 0; font-size: 14px;">Map Legend</h4>
+            <div class="legend-item">
+                <div class="legend-marker" style="color: #000; font-size: 16px;">★</div>
+                <span id="existingCount">Existing Network (0)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-marker">⚡</div>
+                <span id="lightningCount">Live Transmitting (0)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-marker">🤠</div>
+                <span id="cowboyCount">Cyber Cowboys (0)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-marker">🔺</div>
+                <span id="requestCount">Node Requests (0)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-marker">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                            d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
+                            fill="#00BFFF" stroke="white" stroke-width="1" />
+                    </svg>
+                </div>
+                <span id="edgeCount">Edge Expansion (0)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-marker">🌟</div>
+                <span id="priorityCount">Priority (Manual) (0)</span>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <strong id="instructionsTitle">Meshtastic Network Visualization:</strong><br>
+            ★ <strong>Black stars</strong> = Existing Meshtastic network (6,351 nodes)<br>
+            ⚡ <strong>Lightning bolts</strong> = Live transmitting nodes (real-time MQTT)<br>
+            🤠 <strong>Cyber cowboys</strong> = Texas MQTT network (⚡ = live broadcasting)<br>
+            <div id="adminInstructions" style="display: none;">
+                🔺 <strong>Pink triangles</strong> = Node donation requests<br>
+                ⭐ <strong>Cyber blue stars</strong> = Edge expansion opportunities (30-80mi from network)<br>
+                🌟 <strong>Gold stars</strong> = Manually selected priority<br>
+                <br>
+                <strong>Admin Usage:</strong><br>
+                • All 236 donation requests shown (pink triangles or cyber blue stars)<br>
+                • Cyber blue stars automatically highlight good expansion locations<br>
+                • Right-click any marker to cycle: Pink → Cyber Blue → Gold → Pink<br>
+                • Review all requests and manually select priorities<br>
+            </div>
+            <br>
+            <strong>Compare with:</strong> <a href="https://meshmap.net/" target="_blank">meshmap.net</a>
+        </div>
+
+        <div id="debugInfo" class="debug-info" style="display: none;"></div>
+    </div>
+
+    <script>
+        // Configuration
+        const CONFIG = {
+            apiKey: 'AIzaSyBck7tgIkzq1c8kIqLB53CLkrCfwoPVn_s',
+            proxyUrl: 'https://script.google.com/macros/s/AKfycbwL0CR_SSOgYdNBWv_E_UMyrlilHdSCDIVSXfQtQPGYzThnMmbn1NWLHx2XQxLcK1HnzQ/exec'
+        };
+
+        let map;
+        let geocoder;
+        let donationMarkers = []; // Markers for donation requests
+        let existingNodeMarkers = []; // Markers for existing network nodes
+        let cyberCowboyMarkers = []; // Markers for cyber cowboys
+        let lightningMarkers = []; // NEW: Markers for lightning bolt nodes
+        let markerStates = {}; // Track donation marker states
+        let existingNodes = []; // Store existing Meshtastic nodes from meshmap.net
+
+        // Admin system
+        const ADMIN_HASH = 'b482ffb8ad8efea1faa492ed953a7cf7c05edfff7116664e376aad6ecf6a9c04';
+        let isAdminMode = false;
+
+        // Simple marker states for donation requests
+        const DONATION_STATES = {
+            REQUEST: 'request',     // Pink triangle - regular donation requests
+            EDGE: 'edge',           // Cyber blue star - edge expansion opportunity  
+            PRIORITY: 'priority'    // Gold star - manually selected priority
+        };
+
+        // Admin authentication system
+        async function hashPassword(password) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hash = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hash));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function toggleAdmin() {
+            if (isAdminMode) {
+                // Logout
+                isAdminMode = false;
+                updateAdminUI();
+                clearDonationMarkers();
+                updateMarkerCounts();
+                debugLog('👋 Logged out of admin mode');
+            } else {
+                // Login
+                const password = prompt('Enter admin password:');
+                if (!password) return;
+
+                const hash = await hashPassword(password);
+                if (hash === ADMIN_HASH) {
+                    isAdminMode = true;
+                    updateAdminUI();
+                    await loadDonationData(); // Load admin-only data
+                    debugLog('🔐 Admin mode activated');
+                } else {
+                    alert('Invalid password');
+                }
+            }
+        }
+
+        function updateAdminUI() {
+            const mobileBtn = document.querySelector('#mobileAdminBtn button');
+            const desktopBtn = document.getElementById('desktopAdminBtn');
+            const adminInstructions = document.getElementById('adminInstructions');
+            const instructionsTitle = document.getElementById('instructionsTitle');
+
+            if (isAdminMode) {
+                mobileBtn.innerHTML = '🔐 Admin Mode';
+                mobileBtn.style.background = '#ff6b35';
+                desktopBtn.innerHTML = '🔐 Admin Mode';
+                desktopBtn.style.background = '#ff6b35';
+                adminInstructions.style.display = 'block';
+                instructionsTitle.textContent = 'Cluster Edge Detection for Expansion:';
+            } else {
+                mobileBtn.innerHTML = '🔓 Admin Login';
+                mobileBtn.style.background = '#333';
+                desktopBtn.innerHTML = '🔓 Admin Login';
+                desktopBtn.style.background = '#333';
+                adminInstructions.style.display = 'none';
+                instructionsTitle.textContent = 'Texas Meshtastic Network Visualization:';
+            }
+
+            // Update legend visibility
+            updateMarkerCounts();
+        }
+
+        function clearDonationMarkers() {
+            donationMarkers.forEach(marker => {
+                if (marker.infoWindow) {
+                    marker.infoWindow.close();
+                }
+                marker.setMap(null);
+            });
+            donationMarkers = [];
+            markerStates = {};
+        }
+        function debugLog(message) {
+            console.log(message);
+            const debugDiv = document.getElementById('debugInfo');
+            debugDiv.style.display = 'block';
+            debugDiv.innerHTML += new Date().toLocaleTimeString() + ': ' + message + '<br>';
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+
+        // Initialize Google Maps
+        function initMap() {
+            // Initialize map centered on continental US
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 5,
+                center: { lat: 39.8283, lng: -98.5795 },
+                mapTypeId: 'hybrid'
+            });
+
+            geocoder = new google.maps.Geocoder();
+
+            // Set initial UI state (public mode)
+            updateMarkerCounts();
+
+            // Load initial data
+            loadSheetData();
+        }
+
+        // Load data from sources
+        async function loadSheetData() {
+            const statusElement = document.getElementById('status');
+            const refreshBtn = document.getElementById('refreshBtn');
+
+            statusElement.className = 'status loading';
+            statusElement.textContent = 'Loading existing network data...';
+            refreshBtn.disabled = true;
+
+            try {
+                // Clear existing markers
+                clearAllMarkers();
+
+                // First, fetch existing Meshtastic nodes for distance analysis
+                statusElement.textContent = 'Fetching existing Meshtastic network...';
+                await fetchExistingNodes();
+
+                // Fetch lightning bolt nodes from live MQTT
+                statusElement.textContent = 'Fetching lightning nodes...';
+                await fetchLightningNodes();
+
+                // Fetch cyber cowboys from MQTT
+                statusElement.textContent = 'Fetching cyber cowboys...';
+                await fetchCyberCowboys();
+
+                // Load donation data only in admin mode
+                if (isAdminMode) {
+                    await loadDonationData();
+                }
+
+                const counts = calculateCounts();
+                statusElement.className = 'status success';
+
+                if (isAdminMode) {
+                    statusElement.textContent = `Complete: ${counts.existing} existing nodes, ${counts.lightning} lightning nodes, ${counts.cowboy} cyber cowboys, ${counts.request} requests, ${counts.edge} edge opportunities, ${counts.priority} priority`;
+                } else {
+                    statusElement.textContent = `Network Status: ${counts.existing} existing nodes, ${counts.lightning} lightning bolts, ${counts.cowboy} cyber cowboys`;
+                }
+
+            } catch (error) {
+                console.error('Error loading sheet data:', error);
+                statusElement.className = 'status error';
+                statusElement.textContent = `Error: ${error.message}`;
+            } finally {
+                refreshBtn.disabled = false;
+            }
+        }
+
+        // Load donation data (admin only)
+        async function loadDonationData() {
+            try {
+                const statusElement = document.getElementById('status');
+                statusElement.textContent = 'Loading donation requests (admin)...';
+
+                const response = await fetch(CONFIG.proxyUrl);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const addresses = await response.json();
+
+                if (!addresses || addresses.length === 0) {
+                    throw new Error('No data found from proxy');
+                }
+
+                if (addresses.error) {
+                    throw new Error(`Proxy error: ${addresses.error}`);
+                }
+
+                statusElement.textContent = `Found ${addresses.length} requests. Creating markers...`;
+
+                // Geocode addresses and create donation markers
+                await geocodeAndCreateDonationMarkers(addresses);
+
+            } catch (error) {
+                debugLog(`Admin data load failed: ${error.message}`);
+            }
+        }
+
+        // FIXED: Fetch existing Meshtastic nodes from our own backend (no CORS issues)
+        async function fetchExistingNodes() {
+            try {
+                debugLog('Fetching nodes from backend API...');
+
+                // Call our own backend instead of trying CORS proxies
+                const response = await fetch('/api/nodes');
+
+                if (!response.ok) {
+                    throw new Error(`Backend API error: ${response.status}`);
+                }
+
+                const nodes = await response.json();
+
+                if (!Array.isArray(nodes)) {
+                    throw new Error('Backend returned invalid data format');
+                }
+
+                debugLog(`Successfully received ${nodes.length} nodes from backend`);
+
+                if (nodes.length > 0) {
+                    debugLog(`Sample node: ${JSON.stringify(nodes[0])}`);
+
+                    // Validate nodes have required coordinates
+                    const validNodes = nodes.filter(node => {
+                        return node.latitude !== undefined && node.longitude !== undefined &&
+                            !isNaN(node.latitude) && !isNaN(node.longitude) &&
+                            node.latitude >= -90 && node.latitude <= 90 &&
+                            node.longitude >= -180 && node.longitude <= 180;
+                    });
+
+                    debugLog(`Found ${validNodes.length} valid nodes with coordinates`);
+
+                    existingNodes = validNodes;
+                    console.log(`Loaded ${existingNodes.length} existing Meshtastic nodes`);
+
+                    // Create markers for existing nodes
+                    createExistingNodeMarkers();
+                    return existingNodes;
+                }
+
+            } catch (error) {
+                debugLog(`Backend fetch failed: ${error.message}`);
+
+                // Fallback to test data if backend is not available
+                debugLog('Using fallback test data...');
+                existingNodes = [
+                    { latitude: 40.7128, longitude: -74.0060, name: "Test Node NYC", id: "test1" },
+                    { latitude: 34.0522, longitude: -118.2437, name: "Test Node LA", id: "test2" },
+                    { latitude: 41.8781, longitude: -87.6298, name: "Test Node Chicago", id: "test3" },
+                    { latitude: 29.7604, longitude: -95.3698, name: "Test Node Houston", id: "test4" },
+                    { latitude: 39.9526, longitude: -75.1652, name: "Test Node Philadelphia", id: "test5" }
+                ];
+
+                createExistingNodeMarkers();
+                return existingNodes;
+            }
+        }
+
+        // NEW: Fetch live lightning bolt nodes from MQTT backend
+        async function fetchLightningNodes() {
+            try {
+                debugLog('Fetching lightning nodes from /api/lightning-nodes...');
+                const response = await fetch('/api/lightning-nodes');
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+
+                const lightning = await response.json();
+                debugLog(`⚡ Received ${lightning.length} lightning nodes`);
+
+                if (lightning.length > 0) {
+                    debugLog(`Sample lightning node: ${JSON.stringify(lightning[0])}`);
+                }
+
+                createLightningMarkers(lightning);
+                return lightning;
+
+            } catch (error) {
+                debugLog(`⚡ Lightning fetch failed: ${error.message}`);
+                return [];
+            }
+        }
+
+        // Fetch live cyber cowboy nodes from MQTT backend
+        async function fetchCyberCowboys() {
+            try {
+                debugLog('Fetching cyber cowboys from /api/live-nodes...');
+                const response = await fetch('/api/live-nodes');
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+
+                const cowboys = await response.json();
+                debugLog(`🤠⚡ Received ${cowboys.length} cyber cowboys`);
+
+                if (cowboys.length > 0) {
+                    debugLog(`Sample cyber cowboy: ${JSON.stringify(cowboys[0])}`);
+                }
+
+                createCyberCowboyMarkers(cowboys);
+                return cowboys;
+
+            } catch (error) {
+                debugLog(`🤠 Cyber cowboy fetch failed: ${error.message}`);
+                return [];
+            }
+        }
+
+        // NEW: Create markers for lightning bolt nodes
+        function createLightningMarkers(lightningNodes) {
+            // Clear existing lightning markers
+            lightningMarkers.forEach(marker => {
+                if (marker.infoWindow) {
+                    marker.infoWindow.close();
+                }
+                marker.setMap(null);
+            });
+            lightningMarkers = [];
+
+            debugLog(`⚡ Creating ${lightningNodes.length} lightning markers`);
+
+            lightningNodes.forEach((node, index) => {
+                try {
+                    // For now, place lightning nodes at random US coordinates since we don't have coords yet
+                    // Once we parse protobuf data, we'll get real coordinates
+                    const randomLat = 25 + Math.random() * 25; // 25-50 latitude (US range)
+                    const randomLng = -125 + Math.random() * 50; // -125 to -75 longitude (US range)
+
+                    const marker = new google.maps.Marker({
+                        position: { lat: randomLat, lng: randomLng },
+                        map: map,
+                        title: `${node.name} - Live Transmitting`,
+                        icon: createLightningIcon(),
+                        zIndex: 8 // High z-index so lightning appears on top
+                    });
+
+                    // Store lightning data with marker
+                    marker.lightningData = node;
+
+                    // Create info window for lightning nodes
+                    const infoWindow = new google.maps.InfoWindow({
+                        content: createLightningInfoContent(node)
+                    });
+
+                    marker.addListener('click', () => {
+                        // Close all other info windows
+                        [...donationMarkers, ...existingNodeMarkers, ...cyberCowboyMarkers, ...lightningMarkers].forEach(m => {
+                            if (m.infoWindow && m.infoWindow !== infoWindow) {
+                                m.infoWindow.close();
+                            }
+                        });
+                        infoWindow.open(map, marker);
+                    });
+
+                    marker.infoWindow = infoWindow;
+                    lightningMarkers.push(marker);
+
+                } catch (error) {
+                    debugLog(`Failed to create lightning marker ${index}: ${error.message}`);
+                }
+            });
+
+            updateMarkerCounts();
+            debugLog(`⚡ Successfully created ${lightningMarkers.length} lightning markers`);
+        }
+
+        // NEW: Create icon for lightning bolt nodes
+        function createLightningIcon() {
+            return {
+                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="10" fill="#FFD700" stroke="#FF6600" stroke-width="2"/>
+                        <path d="M8 12 L12 8 L10 12 L16 12 L12 16 L14 12 Z" fill="#FF6600" stroke="white" stroke-width="1"/>
+                        <circle cx="12" cy="12" r="2" fill="white"/>
+                    </svg>
+                `),
+                scaledSize: new google.maps.Size(24, 24),
+                anchor: new google.maps.Point(12, 12)
+            };
+        }
+
+        // NEW: Create info window content for lightning nodes
+        function createLightningInfoContent(node) {
+            const timeAgo = Math.round((Date.now() - node.timestamp) / 1000 / 60); // minutes ago
+
+            return `
+                <div style="max-width: 300px;">
+                    <div style="background-color: #FFD700; color: black; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; font-size: 12px; font-weight: bold;">
+                        ⚡ Live Transmitting Node
+                    </div>
+                    <h4 style="margin: 0 0 10px 0; color: #333;">
+                        ${node.name} (${node.shortName})
+                    </h4>
+                    <p style="margin: 5px 0; font-size: 12px;"><strong>Node ID:</strong> ${node.id}</p>
+                    <p style="margin: 5px 0; font-size: 12px;"><strong>Firmware:</strong> ${node.firmware}</p>
+                    <p style="margin: 5px 0; font-size: 12px;"><strong>Region:</strong> ${node.region.toUpperCase()}</p>
+                    <p style="margin: 5px 0; font-size: 12px;"><strong>Last Transmission:</strong> ${timeAgo} minutes ago</p>
+                    <p style="margin: 5px 0; font-size: 11px; color: #888;">
+                        <strong>MQTT Topic:</strong> ${node.topic}
+                    </p>
+                    <p style="margin: 0; font-size: 10px; color: #888;">
+                        Source: Live MQTT (mqtt.meshtastic.org)
+                    </p>
+                    <p style="margin: 5px 0; font-size: 10px; color: #FF6600; font-style: italic;">
+                        Note: Coordinates pending protobuf parsing
+                    </p>
+                </div>
+            `;
+        }
+
+        // Create markers for cyber cowboy nodes with smart live detection
+        function createCyberCowboyMarkers(cowboys) {
+            // Clear existing cowboy markers
+            cyberCowboyMarkers.forEach(marker => {
+                if (marker.infoWindow) {
+                    marker.infoWindow.close();
+                }
+                marker.setMap(null);
+            });
+            cyberCowboyMarkers = [];
+
+            debugLog(`🤠 Creating ${cowboys.length} cyber cowboy markers`);
+
+            cowboys.forEach((cowboy, index) => {
+                try {
+                    // Determine if cowboy is actively broadcasting (last 10 minutes)
+                    const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+                    const isLiveBroadcasting = cowboy.timestamp > tenMinutesAgo;
+
+                    const marker = new google.maps.Marker({
+                        position: { lat: cowboy.latitude, lng: cowboy.longitude },
+                        map: map,
+                        title: cowboy.name || `Cyber Cowboy ${cowboy.id}`,
+                        icon: createCyberCowboyIcon(isLiveBroadcasting),
+                        zIndex: 5 // Between existing nodes and donation markers
+                    });
+
+                    // Store cowboy data with marker
+                    marker.cowboyData = cowboy;
+                    marker.isLiveBroadcasting = isLiveBroadcasting;
+
+                    // Create info window for cyber cowboys
+                    const infoWindow = new google.maps.InfoWindow({
+                        content: createCyberCowboyInfoContent(cowboy, isLiveBroadcasting)
+                    });
+
+                    marker.addListener('click', () => {
+                        // Close all other info windows
+                        [...donationMarkers, ...existingNodeMarkers, ...cyberCowboyMarkers, ...lightningMarkers].forEach(m => {
+                            if (m.infoWindow && m.infoWindow !== infoWindow) {
+                                m.infoWindow.close();
+                            }
+                        });
+                        infoWindow.open(map, marker);
+                    });
+
+                    marker.infoWindow = infoWindow;
+                    cyberCowboyMarkers.push(marker);
+
+                } catch (error) {
+                    debugLog(`Failed to create cyber cowboy marker ${index}: ${error.message}`);
+                }
+            });
+
+            updateMarkerCounts();
+            debugLog(`🤠⚡ Successfully created ${cyberCowboyMarkers.length} cyber cowboy markers`);
+        }
+
+        // Create icon for cyber cowboy nodes (🤠 or 🤠⚡)
+        function createCyberCowboyIcon(isLiveBroadcasting) {
+            const lightningBolt = isLiveBroadcasting ? '<text x="18" y="8" text-anchor="middle" font-size="8" fill="#FFD700">⚡</text>' : '';
+
+            return {
+                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="14" r="8" fill="#FFD700" stroke="#8B4513" stroke-width="2"/>
+                        <circle cx="10" cy="12" r="1" fill="#000"/>
+                        <circle cx="14" cy="12" r="1" fill="#000"/>
+                        <path d="M9 16 Q12 18 15 16" stroke="#000" stroke-width="1.5" fill="none"/>
+                        <ellipse cx="12" cy="6" rx="6" ry="3" fill="#8B4513"/>
+                        <ellipse cx="12" cy="5" rx="4" ry="2" fill="#D2691E"/>
+                        ${lightningBolt}
+                    </svg>
+                `),
+                scaledSize: new google.maps.Size(24, 24),
+                anchor: new google.maps.Point(12, 14)
+            };
+        }
+
+        // Create info window content for cyber cowboys
+        function createCyberCowboyInfoContent(cowboy, isLiveBroadcasting) {
+            const timeAgo = Math.round((Date.now() - cowboy.timestamp) / 1000 / 60); // minutes ago
+            const statusText = isLiveBroadcasting ? 'Live Broadcasting ⚡' : 'Network Node';
+            const statusColor = isLiveBroadcasting ? '#FFD700' : '#8B4513';
+
+            return `
+                <div style="max-width: 300px;">
+                    <div style="background-color: ${statusColor}; color: white; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; font-size: 12px; font-weight: bold;">
+                        🤠 Cyber Cowboy - ${statusText}
+                    </div>
+                    <h4 style="margin: 0 0 10px 0; color: #333;">
+                        ${cowboy.name}
+                    </h4>
+                    <p style="margin: 5px 0; font-size: 12px;"><strong>Node ID:</strong> ${cowboy.id}</p>
+                    <p style="margin: 5px 0; font-size: 12px;"><strong>Last Update:</strong> ${timeAgo} minutes ago</p>
+                    ${cowboy.battery ? `<p style="margin: 5px 0; font-size: 12px;"><strong>Battery:</strong> ${cowboy.battery}%</p>` : ''}
+                    ${cowboy.snr ? `<p style="margin: 5px 0; font-size: 12px;"><strong>SNR:</strong> ${cowboy.snr} dB</p>` : ''}
+                    ${cowboy.rssi ? `<p style="margin: 5px 0; font-size: 12px;"><strong>RSSI:</strong> ${cowboy.rssi} dBm</p>` : ''}
+                    <p style="margin: 5px 0; font-size: 11px; color: #888;">
+                        <strong>Coordinates:</strong> ${cowboy.latitude.toFixed(4)}, ${cowboy.longitude.toFixed(4)}
+                    </p>
+                    <p style="margin: 0; font-size: 10px; color: #888;">
+                        Source: Live MQTT (msh/us/tx/llam/bit)
+                    </p>
+                </div>
+            `;
+        }
+
+        // Create markers for existing network nodes (black stars)
+        function createExistingNodeMarkers() {
+            debugLog(`Creating ${existingNodes.length} existing node markers`);
+
+            existingNodes.forEach((node, index) => {
+                try {
+                    const marker = new google.maps.Marker({
+                        position: { lat: node.latitude, lng: node.longitude },
+                        map: map,
+                        title: node.name || node.id || `Meshtastic Node ${index + 1}`,
+                        icon: createExistingNodeIcon(),
+                        zIndex: 1 // Lower z-index so donation markers appear on top
+                    });
+
+                    // Create info window for existing nodes
+                    const infoWindow = new google.maps.InfoWindow({
+                        content: createExistingNodeInfoContent(node)
+                    });
+
+                    marker.addListener('click', () => {
+                        // Close all other info windows
+                        [...donationMarkers, ...existingNodeMarkers, ...cyberCowboyMarkers, ...lightningMarkers].forEach(m => {
+                            if (m.infoWindow && m.infoWindow !== infoWindow) {
+                                m.infoWindow.close();
+                            }
+                        });
+                        infoWindow.open(map, marker);
+                    });
+
+                    marker.infoWindow = infoWindow;
+                    existingNodeMarkers.push(marker);
+                } catch (error) {
+                    debugLog(`Failed to create marker for node ${index}: ${error.message}`);
+                }
+            });
+
+            updateMarkerCounts();
+            debugLog(`Successfully created ${existingNodeMarkers.length} existing node markers`);
+        }
+
+        // Create icon for existing network nodes (black stars)
+        function createExistingNodeIcon() {
+            return {
+                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="#000000" stroke="white" stroke-width="1"/>
+                    </svg>
+                `),
+                scaledSize: new google.maps.Size(20, 20),
+                anchor: new google.maps.Point(10, 10)
+            };
+        }
+
+        // Create info window content for existing nodes  
+        function createExistingNodeInfoContent(node) {
+            return `
+                <div style="max-width: 300px;">
+                    <div style="background-color: #000; color: white; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; font-size: 12px; font-weight: bold;">
+                        ★ Existing Network Node (Live Data)
+                    </div>
+                    <h4 style="margin: 0 0 10px 0; color: #333;">
+                        ${node.name || node.id || 'Meshtastic Node'}
+                    </h4>
+                    ${node.id ? `<p style="margin: 5px 0; font-size: 12px;"><strong>Node ID:</strong> ${node.id}</p>` : ''}
+                    ${node.hardware ? `<p style="margin: 5px 0; font-size: 12px;"><strong>Hardware:</strong> ${node.hardware}</p>` : ''}
+                    ${node.lastSeen ? `<p style="margin: 5px 0; font-size: 12px;"><strong>Last Seen:</strong> ${new Date(node.lastSeen * 1000).toLocaleDateString()}</p>` : ''}
+                    <p style="margin: 5px 0; font-size: 11px; color: #888;">
+                        <strong>Coordinates:</strong> ${node.latitude.toFixed(4)}, ${node.longitude.toFixed(4)}
+                    </p>
+                    <p style="margin: 5px 0; font-size: 11px; color: #888;">
+                        <strong>Network Distance:</strong> Within mesh range of other nodes
+                    </p>
+                    <p style="margin: 0; font-size: 10px; color: #888;">
+                        Source: meshmap.net API (Live Network Data)
+                    </p>
+                </div>
+            `;
+        }
+
+        // Calculate distance between two coordinates using Haversine formula
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 3959; // Earth's radius in miles
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c; // Distance in miles
+        }
+
+        // Check if location is good for edge expansion (30-80 miles from network)
+        function isEdgeExpansion(lat, lng) {
+            if (existingNodes.length === 0) return false;
+
+            let minDistance = Infinity;
+            existingNodes.forEach(node => {
+                const distance = calculateDistance(lat, lng, node.latitude, node.longitude);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                }
+            });
+
+            // Good expansion range: not too close (redundant) not too far (isolated)
+            return minDistance >= 30 && minDistance <= 80;
+        }
+
+        // Check distance to nearest existing node for mesh-aware classification
+        function getDistanceToNearestNode(lat, lng) {
+            if (existingNodes.length === 0) return Infinity;
+
+            let minDistance = Infinity;
+            existingNodes.forEach(node => {
+                const distance = calculateDistance(lat, lng, node.latitude, node.longitude);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                }
+            });
+            return minDistance;
+        }
+
+        // Check if location is suitable for mesh expansion (20-100 miles from network)
+        function getMeshClassification(lat, lng) {
+            const distance = getDistanceToNearestNode(lat, lng);
+
+            if (distance < 20) {
+                return 'redundancy'; // Too close - just redundancy
+            } else if (distance >= 20 && distance <= 50) {
+                return 'immediate'; // Immediate mesh range - gold stars
+            } else if (distance > 50 && distance <= 100) {
+                return 'expansion'; // Mesh expansion range - blue circles  
+            } else {
+                return 'isolated'; // Too far for mesh - gray circles
+            }
+        }
+
+        // Geocode addresses and create donation markers (ensure ALL requests are processed)
+        async function geocodeAndCreateDonationMarkers(addresses) {
+            debugLog(`Starting to geocode ${addresses.length} addresses`);
+            let successCount = 0;
+            let failCount = 0;
+
+            const promises = addresses.map(async (addressData, index) => {
+                // Add delay to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, index * 100));
+
+                try {
+                    const results = await geocodeAddress(addressData.address);
+                    if (results && results.length > 0) {
+                        const location = results[0].geometry.location;
+                        createDonationMarker(location, addressData);
+                        successCount++;
+                        if (successCount % 20 === 0) {
+                            debugLog(`Geocoded ${successCount} addresses so far...`);
+                        }
+                    } else {
+                        failCount++;
+                        debugLog(`No results for: ${addressData.address}`);
+                    }
+                } catch (error) {
+                    failCount++;
+                    debugLog(`Failed to geocode: ${addressData.address} - ${error.message}`);
+                }
+            });
+
+            await Promise.all(promises);
+            debugLog(`Geocoding complete: ${successCount} successful, ${failCount} failed out of ${addresses.length} total`);
+        }
+
+        // Geocode a single address
+        function geocodeAddress(address) {
+            return new Promise((resolve, reject) => {
+                geocoder.geocode({ address: address }, (results, status) => {
+                    if (status === 'OK') {
+                        resolve(results);
+                    } else {
+                        reject(new Error(`Geocoding failed: ${status}`));
+                    }
+                });
+            });
+        }
+
+        // Create marker icons for donation requests
+        function createDonationMarkerIcon(state) {
+            switch (state) {
+                case DONATION_STATES.PRIORITY:
+                    // Gold star for manually selected priority
+                    return {
+                        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="#FFD700" stroke="white" stroke-width="2"/>
+                                <circle cx="12" cy="12" r="3" fill="white"/>
+                            </svg>
+                        `),
+                        scaledSize: new google.maps.Size(24, 24),
+                        anchor: new google.maps.Point(12, 12)
+                    };
+                case DONATION_STATES.EDGE:
+                    // Cyber blue star for edge expansion opportunities
+                    return {
+                        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="#00BFFF" stroke="white" stroke-width="2"/>
+                                <circle cx="12" cy="12" r="3" fill="white"/>
+                            </svg>
+                        `),
+                        scaledSize: new google.maps.Size(24, 24),
+                        anchor: new google.maps.Point(12, 12)
+                    };
+                default: // REQUEST
+                    // Pink triangle for regular donation requests
+                    return {
+                        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2L22 20H2L12 2Z" fill="#ff69b4" stroke="white" stroke-width="2"/>
+                                <circle cx="12" cy="14" r="2" fill="white"/>
+                            </svg>
+                        `),
+                        scaledSize: new google.maps.Size(24, 24),
+                        anchor: new google.maps.Point(12, 20)
+                    };
+            }
+        }
+
+        // Create marker for donation request - simple classification with edge detection
+        function createDonationMarker(location, addressData) {
+            const markerId = `donation_${addressData.rowIndex}`;
+
+            // Check if this location is good for edge expansion
+            const lat = location.lat();
+            const lng = location.lng();
+            const isGoodEdge = isEdgeExpansion(lat, lng);
+
+            // Auto-classify: edge expansion gets orange, others get pink
+            const initialState = isGoodEdge ? DONATION_STATES.EDGE : DONATION_STATES.REQUEST;
+            markerStates[markerId] = initialState;
+
+            const marker = new google.maps.Marker({
+                position: location,
+                map: map,
+                title: addressData.nameOfLocation || addressData.address,
+                icon: createDonationMarkerIcon(initialState),
+                zIndex: 10 // Higher z-index so donation markers appear on top
+            });
+
+            // Store reference for state management
+            marker.markerId = markerId;
+            marker.addressData = addressData;
+            marker.originalState = initialState; // Remember the auto-determined state
+
+            // Create info window with detailed information
+            const infoWindow = new google.maps.InfoWindow({
+                content: createDonationInfoWindowContent(addressData, initialState)
+            });
+
+            // Left click - show info window with all sheet data
+            marker.addListener('click', () => {
+                // Close all other info windows
+                [...donationMarkers, ...existingNodeMarkers, ...cyberCowboyMarkers, ...lightningMarkers].forEach(m => {
+                    if (m.infoWindow && m.infoWindow !== infoWindow) {
+                        m.infoWindow.close();
+                    }
+                });
+
+                // Update info window content with current state and all sheet data
+                const currentState = markerStates[markerId];
+                infoWindow.setContent(createDonationInfoWindowContent(addressData, currentState));
+                infoWindow.open(map, marker);
+            });
+
+            // Right click - cycle priority state (admin only)
+            if (isAdminMode) {
+                marker.addListener('rightclick', (e) => {
+                    e.stop(); // Prevent context menu
+                    console.log('Right-clicked marker:', markerId, 'current state:', markerStates[markerId]);
+                    const newState = cycleDonationMarkerState(markerId);
+                    console.log('New state:', newState);
+                    marker.setIcon(createDonationMarkerIcon(newState));
+                    updateMarkerCounts();
+
+                    // Update info window if it's open
+                    if (infoWindow.getMap()) {
+                        infoWindow.setContent(createDonationInfoWindowContent(addressData, newState));
+                    }
+                });
+            }
+
+            marker.infoWindow = infoWindow;
+            donationMarkers.push(marker);
+            updateMarkerCounts();
+        }
+
+        // Cycle donation marker state (right-click: cycle through all states)
+        function cycleDonationMarkerState(markerId) {
+            const currentState = markerStates[markerId] || DONATION_STATES.REQUEST;
+            let newState;
+
+            // Cycle through all states: Request → Edge → Priority → Request
+            switch (currentState) {
+                case DONATION_STATES.REQUEST:
+                    newState = DONATION_STATES.EDGE;
+                    break;
+                case DONATION_STATES.EDGE:
+                    newState = DONATION_STATES.PRIORITY;
+                    break;
+                case DONATION_STATES.PRIORITY:
+                    newState = DONATION_STATES.REQUEST;
+                    break;
+                default:
+                    newState = DONATION_STATES.REQUEST;
+            }
+
+            markerStates[markerId] = newState;
+            return newState;
+        }
+
+        // Create content for donation info window
+        function createDonationInfoWindowContent(data, state) {
+            const stateLabels = {
+                [DONATION_STATES.REQUEST]: '🔺 Node Request',
+                [DONATION_STATES.EDGE]: '⭐ Edge Expansion',
+                [DONATION_STATES.PRIORITY]: '🌟 Priority (Manual)'
+            };
+
+            const stateColors = {
+                [DONATION_STATES.REQUEST]: '#ff69b4',
+                [DONATION_STATES.EDGE]: '#00BFFF',
+                [DONATION_STATES.PRIORITY]: '#FFD700'
+            };
+
+            const stateDescriptions = {
+                [DONATION_STATES.REQUEST]: 'Donation request location',
+                [DONATION_STATES.EDGE]: 'Good edge expansion opportunity (30-80 miles from network)',
+                [DONATION_STATES.PRIORITY]: 'Manually selected as priority'
+            };
+
+            return `
+                <div style="max-width: 350px;">
+                    <div style="background-color: ${stateColors[state]}; color: white; padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; font-size: 12px; font-weight: bold;">
+                        ${stateLabels[state]}
+                    </div>
+                    <div style="font-size: 10px; color: #666; margin-bottom: 8px; font-style: italic;">
+                        ${stateDescriptions[state]}
+                    </div>
+                    <h4 style="margin: 0 0 10px 0; color: #333;">
+                        ${data.nameOfLocation || 'Donation Request'}
+                    </h4>
+                    ${data.address ? `
+                        <p style="margin: 5px 0; font-size: 12px; color: #666;">
+                            <strong>Address:</strong><br>${data.address}
+                        </p>
+                    ` : ''}
+                    ${data.locationDescription ? `
+                        <p style="margin: 5px 0; font-size: 12px;">
+                            <strong>Location Description:</strong><br>${data.locationDescription}
+                        </p>
+                    ` : ''}
+                    ${data.briefDescription ? `
+                        <p style="margin: 5px 0; font-size: 12px;">
+                            <strong>Details:</strong><br>${data.briefDescription}
+                        </p>
+                    ` : ''}
+                    ${data.contactInfo ? `
+                        <p style="margin: 5px 0; font-size: 12px;">
+                            <strong>Contact:</strong><br>${data.contactInfo}
+                        </p>
+                    ` : ''}
+                    ${data.sjSmf ? `
+                        <p style="margin: 5px 0; font-size: 12px;">
+                            <strong>SJ-SMF:</strong><br>${data.sjSmf}
+                        </p>
+                    ` : ''}
+                    ${data.timestamp ? `
+                        <p style="margin: 5px 0; font-size: 11px; color: #888;">
+                            <strong>Submitted:</strong> ${data.timestamp}
+                        </p>
+                    ` : ''}
+                    ${data.rowIndex ? `
+                        <p style="margin: 5px 0; font-size: 11px; color: #888;">
+                            <strong>Request ID:</strong> ${data.rowIndex}
+                        </p>
+                    ` : ''}
+                    <hr style="margin: 8px 0; border: none; border-top: 1px solid #eee;">
+                    <p style="margin: 0; font-size: 10px; color: #888;">
+                        Right-click to change status: Pink → Cyber Blue → Gold
+                    </p>
+                </div>
+            `;
+        }
+
+        // Calculate and return counts for all markers
+        function calculateCounts() {
+            const counts = {
+                existing: existingNodeMarkers.length,
+                lightning: lightningMarkers.length,
+                cowboy: cyberCowboyMarkers.length,
+                request: 0,
+                edge: 0,
+                priority: 0
+            };
+
+            Object.values(markerStates).forEach(state => {
+                switch (state) {
+                    case DONATION_STATES.REQUEST:
+                        counts.request++;
+                        break;
+                    case DONATION_STATES.EDGE:
+                        counts.edge++;
+                        break;
+                    case DONATION_STATES.PRIORITY:
+                        counts.priority++;
+                        break;
+                }
+            });
+
+            return counts;
+        }
+
+        // Update marker counts in the legend
+        function updateMarkerCounts() {
+            const counts = calculateCounts();
+
+            document.getElementById('existingCount').textContent = `Existing Network (${counts.existing})`;
+            document.getElementById('lightningCount').textContent = `Live Transmitting (${counts.lightning})`;
+            document.getElementById('cowboyCount').textContent = `Cyber Cowboys (${counts.cowboy})`;
+
+            // Show/hide admin-only legend items
+            const adminItems = ['requestCount', 'edgeCount', 'priorityCount'];
+            adminItems.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    if (isAdminMode) {
+                        element.parentElement.style.display = 'flex';
+                    } else {
+                        element.parentElement.style.display = 'none';
+                    }
+                }
+            });
+
+            if (isAdminMode) {
+                document.getElementById('requestCount').textContent = `Node Requests (${counts.request})`;
+                document.getElementById('edgeCount').textContent = `Edge Expansion (${counts.edge})`;
+                document.getElementById('priorityCount').textContent = `Priority (Manual) (${counts.priority})`;
+            }
+        }
+
+        // Clear all markers from map
+        function clearAllMarkers() {
+            // Clear donation markers
+            donationMarkers.forEach(marker => {
+                if (marker.infoWindow) {
+                    marker.infoWindow.close();
+                }
+                marker.setMap(null);
+            });
+            donationMarkers = [];
+
+            // Clear existing node markers
+            existingNodeMarkers.forEach(marker => {
+                if (marker.infoWindow) {
+                    marker.infoWindow.close();
+                }
+                marker.setMap(null);
+            });
+            existingNodeMarkers = [];
+
+            // Clear cyber cowboy markers
+            cyberCowboyMarkers.forEach(marker => {
+                if (marker.infoWindow) {
+                    marker.infoWindow.close();
+                }
+                marker.setMap(null);
+            });
+            cyberCowboyMarkers = [];
+
+            // NEW: Clear lightning markers
+            lightningMarkers.forEach(marker => {
+                if (marker.infoWindow) {
+                    marker.infoWindow.close();
+                }
+                marker.setMap(null);
+            });
+            lightningMarkers = [];
+
+            markerStates = {}; // Reset marker states
+            updateMarkerCounts(); // Update counters
+        }
+
+        // Auto-refresh lightning bolts every 1 minute and cyber cowboys every 30 seconds
+        setInterval(async () => {
+            await fetchLightningNodes();
+        }, 60000); // Lightning nodes refresh every 1 minute
+
+        setInterval(async () => {
+            await fetchCyberCowboys();
+        }, 30000); // Cyber cowboys refresh every 30 seconds
+
+        // Error handling for Google Maps API
+        window.gm_authFailure = function () {
+            document.getElementById('status').className = 'status error';
+            document.getElementById('status').textContent = 'Google Maps API authentication failed. Check your API key.';
+        };
+    </script>
+
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBck7tgIkzq1c8kIqLB53CLkrCfwoPVn_s&libraries=geometry&callback=initMap">
+        </script>
+</body>
+
+</html>
